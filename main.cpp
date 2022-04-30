@@ -3,6 +3,7 @@
 #include <vector>
 #include <unordered_map>
 #include <ctime>
+#include <cmath>
 #include <string>
 
 /*template <class T>
@@ -98,21 +99,21 @@ public:
 };
 
 uint8_t grayscale(uint8_t r, uint8_t g, uint8_t b, uint8_t maxval) {
-	float fr = r / maxval, fg = g / maxval, fb = b / maxval;
-	uint8_t _r, _g, _b, _y, y;
+	float fr = (float)r / maxval, fg = (float)g / maxval, fb = (float)b / maxval;
+	float _r, _g, _b, _y, y;
 
-	_r = (fr <= 0.04045) ? (fr / 12.92) : pow((fr / 0.055) / 1.055, 2.4);
-	_g = (fg <= 0.04045) ? (fg / 12.92) : pow((fg / 0.055) / 1.055, 2.4);
-	_b = (fb <= 0.04045) ? (fb / 12.92) : pow((fb / 0.055) / 1.055, 2.4);
+	_r = (fr <= 0.04045) ? (fr / 12.92) : pow((fr + 0.055) / 1.055, 2.4);
+	_g = (fg <= 0.04045) ? (fg / 12.92) : pow((fg + 0.055) / 1.055, 2.4);
+	_b = (fb <= 0.04045) ? (fb / 12.92) : pow((fb + 0.055) / 1.055, 2.4);
 
 	_y = 0.2126 * _r + 0.7152 * _g + 0.0722 *_b;
-	if (_y <= 0.0031308) {
+	if (_y <= 0.00313) {
 		y = 12.92 * _y;
-		return uint8_t(round(y * 255));
+		return uint8_t(round(y * maxval));
 	}
 	else {
 		y = 1.055 * pow(_y, 1/2.4) - 0.055;
-		return uint8_t(round(y * 255));
+		return uint8_t(round(y * maxval));
 	}
 }
 
@@ -198,9 +199,8 @@ void read_netpbm_bw(const char* filename, std::vector<uint8_t>* img) {
 				file.read(reinterpret_cast<char*>(&g), 1);
 				file.read(reinterpret_cast<char*>(&b), 1);
 
-				val = grayscale(r, g, b, 255);
-
-				(val < 233) ? val = 0 : val = 1;
+				val = grayscale(r, g, b, 255);	//Grayscaling image
+				(val < 128) ? val = 0 : val = 1; // Turning it black/white
 
 				img->push_back(val);
 			}
