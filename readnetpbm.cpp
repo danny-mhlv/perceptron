@@ -116,6 +116,35 @@ void read_netpbm_bw(const char* filename, std::vector<uint8_t>* img) {
 	file.close();
 }
 
+void apply_noise(std::vector<uint8_t>* img, float percent) {
+	srand((unsigned)time(0));
+
+	float rn = 0.f;
+	float pc = percent / 100;
+	for (auto& pixel : *img) {
+		rn = abs(float(rand()) / RAND_MAX);
+		if (rn < 0.2) {
+			pixel == 0 ? pixel = 1 : pixel = 0;
+		}
+	}
+}
+
+void display_ascii(std::vector<uint8_t>* img, int w) {
+	int n = 0;
+	for (uint8_t el : *img) {
+		if (n % w == 0) {
+			std::cout << "\n";
+		}
+		if (el == 1) {
+			std::cout << "@";
+		}
+		else {
+			std::cout << ".";
+		}
+		n++;
+	}
+}
+
 /*// Display
 	int n = 0;
 	for (uint8_t el : *img) {
