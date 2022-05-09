@@ -6,17 +6,23 @@
 #include <string>
 #include <algorithm>
 #include <fstream>
+#include <chrono>
+#include <random>
+
+#include "matplotlibcpp.h"
+
+namespace mpp = matplotlibcpp;
 
 class sample {
-	std::vector<uint8_t> values;
+	std::vector<std::vector<uint8_t>> values;
 	std::string key;
 public:
 	sample();
 	sample(std::string arg_key);
 
 	// Get a pointer to a value-vector of this sample
-	std::vector<uint8_t>* const get_pvalues();
-	std::vector<uint8_t>& get_rvalues();
+	std::vector<std::vector<uint8_t>>* const get_pvalues();
+	std::vector<std::vector<uint8_t>>& get_rvalues();
 	// Get size of a values vector (size of sample)
 	int get_size();
 	// Get key
@@ -30,7 +36,6 @@ class neuron {
 	float sum;		// Weighted sum of a neuron
 	float a_coeff;	// Sigmoid slope coeffitient
 	float out;		// Output signal of a neuron
-	float error;	// Error of the neuron
 	int ncon;		// Number of connections this neuron has
 
 	// Summing the weighted inputs
@@ -45,6 +50,7 @@ public:
 
 	// Initialize connections
 	void init_connections(int n, float divider = 1.f);
+	void init_input(int n);
 
 	// Input for a new signal
 	void pulse(std::vector<T>* sigs);
@@ -57,12 +63,13 @@ public:
 
 	// Get the neuron output
 	float get_output();
+	// Get number of connections
+	int get_ncon();
 	// Get weights vector
-	std::vector<float>* get_weights();
+	const std::vector<float> const* get_weights();
+	const std::vector<float> const* get_signals();
 
-	void set_err(float err);
-	void adjust_weights();
-	void adjust_weights_d(float delta);
+	void adjust_weights(std::vector<float>* gradients, float rate);
 };
 
 template <class T>
@@ -71,16 +78,6 @@ class perceptron3 {
 	std::vector<neuron<T>> l1;
 	std::vector<neuron<T>> l2;
 	std::vector<neuron<T>> l3;
-
-	// Layer-output vectors
-	std::vector<float> l1_out;
-	std::vector<float> l2_out;
-	std::vector<float> l3_out;
-
-	// Error vector amd the
-	// general error of the network
-	std::vector<float> vec_err;
-	float cost;
 
 	// Class map
 	// Desired result map (key is string and value is a set of outputs)
@@ -119,11 +116,11 @@ sample::sample(std::string arg_key) {
 }
 
 // Get a pointer to a value-vector of this sample
-std::vector<uint8_t>* const sample::get_pvalues() {
+std::vector<std::vector<uint8_t>>* const sample::get_pvalues() {
 	return &values;
 }
 
-inline std::vector<uint8_t>& sample::get_rvalues()
+inline std::vector<std::vector<uint8_t>>& sample::get_rvalues()
 {
 	return values;
 }
@@ -145,12 +142,12 @@ std::string sample::get_key() {
 // Summing the weighted inputs
 template <class T>
 float neuron<T>::calc_sum() {
-	sum = 0;
+	this->sum = 0;
 	for (int i = 0; i < ncon; i++) {
-		sum += float(signals[i]) * weights[i];
+		this->sum += float(signals.at(i)) * weights.at(i);
 	}
 
-	return sum;
+	return this->sum;
 }
 
 // Sigmoid activation function
@@ -169,7 +166,6 @@ neuron<T>::neuron() {
 	out = 0;
 	sum = 0;
 	ncon = 0;
-	error = 0;
 	a_coeff = 1;
 }
 
@@ -178,14 +174,23 @@ neuron<T>::neuron(int n) {
 	out = 0;
 	sum = 0;
 	ncon = n;
+	a_coeff = 1;
 }
 
 // Initialize connections
 template <class T>
-void neuron<T>::init_connections(int n, float divider) { // Divider parameter??
+void neuron<T>::init_connections(int n, float divider) { 
 	ncon = n;
 	for (int i = 0; i < ncon; i++) {
-		this->weights.push_back(float(rand()) / RAND_MAX / divider /* / divider ???*/);
+		this->weights.push_back(float(rand()) / RAND_MAX / divider);
+	}
+}
+
+template <class T>
+void neuron<T>::init_input(int n) {
+	ncon = n;
+	for (int i = 0; i < ncon; i++) {
+		this->weights.push_back(1);
 	}
 }
 
@@ -222,40 +227,29 @@ float neuron<T>::get_output() {
 }
 
 template<class T>
-std::vector<float>* neuron<T>::get_weights()
+inline int neuron<T>::get_ncon()
+{
+	return ncon;
+}
+
+template<class T>
+const std::vector<float> const* neuron<T>::get_weights()
 {
 	return &weights;
 }
 
 template<class T>
-void neuron<T>::set_err(float err)
+const std::vector<float> const* neuron<T>::get_signals()
 {
-	error = err;
+	return &signals;
 }
 
 template<class T>
-void neuron<T>::adjust_weights()
+inline void neuron<T>::adjust_weights(std::vector<float>* gradients, float rate)
 {
-	float t_speed = 0.1;
-	float derv = out * (1 - out);
-	float delta = error * derv;
-
 	int i = 0;
-	for (auto& w : weights) {
-		w -= t_speed * delta * float(signals.at(i));
-		i++;
-	}
-}
-
-template<class T>
-inline void neuron<T>::adjust_weights_d(float delta)
-{
-	float t_speed = 0.1;
-	float derv = out * (1 - out);
-
-	int i = 0;
-	for (auto& w : weights) {
-		w -= t_speed * delta * derv * float(signals.at(i));
+	for (float& w : weights) {
+		w = w - rate * gradients->at(i);
 		i++;
 	}
 }
@@ -274,8 +268,6 @@ perceptron3<T>::perceptron3(int n1, int n2, int n3)
 		l2.push_back(neuron<T>());
 	for (int i = 0; i < n3; i++)
 		l3.push_back(neuron<T>());
-
-	cost = 0.f;
 }
 
 template<class T>
@@ -288,8 +280,6 @@ perceptron3<T>::perceptron3(int n1, int n2, int n3, int trainset_sz)
 		l2.push_back(neuron<T>(n1));
 	for (int i = 0; i < n3; i++)
 		l3.push_back(neuron<T>(n2));
-
-	cost = 0.f;
 }
 
 template<class T>
@@ -316,10 +306,10 @@ void perceptron3<T>::init_trainset(std::vector<sample>* trainset)
 		outs.clear();
 		for (int j = 0; j < l3.size(); j++) {
 			if (j == i) {
-				outs.push_back(0.999f);
+				outs.push_back(0.9999f);
 			}
 			else {
-				outs.push_back(0.001f);
+				outs.push_back(0.1000f);
 			}
 		}
 		desresult.emplace(t_sample.get_key(), outs);
@@ -329,176 +319,202 @@ void perceptron3<T>::init_trainset(std::vector<sample>* trainset)
 
 template<class T>
 void perceptron3<T>::teach(std::vector<sample>* trainset, int n_epochs) {
+	std::vector<float> errs;
+	
 	float ideal = 0.f;
-	std::vector<float> loss;
-	float e = 0.f;
 	float sum = 0.f;
+	float cost_of_sample = 0.f;
+	std::vector<float> costs;
+	float grad_sum = 0.f;
+	int neuron_cnt = 0;
+	int sample_cnt = 0;
 
-	// Vector of error and deltas 
-	// for each neuron in each layer
-	std::vector<float> l1_err, l2_err, l3_err;
+	// Output vectors
+	std::vector<float> l1_out, l2_out, l3_out;
+	// Delta vectors
 	std::vector<float> deltas3, deltas2, deltas1;
-
-	//std::ofstream log("log.txt");
+	// Gradient matricies
+	std::vector<std::vector<std::vector<float>>>
+		grad3(l3.size(), std::vector<std::vector<float>>(trainset->size(), std::vector<float>(0))),
+		grad2(l2.size(), std::vector<std::vector<float>>(trainset->size(), std::vector<float>(0))),
+		grad1(l1.size(), std::vector<std::vector<float>>(trainset->size(), std::vector<float>(0)));
+	// Averaged grads for 1 neuron
+	std::vector<float> avg_gradients;
 
 	for (int epoch = 1; epoch <= n_epochs; epoch++) {
-		//log << "--- EPOCH [" << epoch << "] ---" << std::endl;
-		
-		cost = 0.f;
-		for (sample t_sample : *trainset) {
-			// Clearing layer-output vectors
-			l1_out.clear(); l2_out.clear(); l3_out.clear();
-			// Clearing layer-deltas vectors
-			deltas3.clear(); deltas2.clear(); deltas1.clear();
-			// Clearing layer-error vectors
-			l1_err.clear(); l2_err.clear(); l3_err.clear();
-			// Clearing vector of differences on output layer
-			loss.clear();
-			
-			// - Forward propagation of the training sample -
-			for (auto& neuron : l1) {
-				neuron.pulse(t_sample.get_pvalues());
-				neuron.train(1.f);
-
-				l1_out.push_back(neuron.get_output());
-			}
-			for (auto& neuron : l2) {
-				neuron.pulse(&l1_out);
-				neuron.train(1.f);
-
-				l2_out.push_back(neuron.get_output());
-			}
-			for (auto& neuron : l3) {
-				neuron.pulse(&l2_out);
-				neuron.train(0.3f);
-
-				l3_out.push_back(neuron.get_output());
-				std::cout << "O: " << l3_out.back() << std::endl;
-				//log << l3_out.back() << std::endl;
-			} //log << "---------------------" << std::endl;
-			std::cout << "---------------------\n" << std::endl;
-			// - Back propagation -
-			// Calculating an error
-			int j, i = 0;
-			for (float actual_out : l3_out) {
-				ideal = desresult[t_sample.get_key()].at(i);
-				loss.push_back(actual_out - ideal);
-				
-				cost += loss.back() * loss.back();
-				i++;
-			}
-
-			// Calculating errors of layer3
-			i = 0;
-			for (auto& neuron : l3) {
-				l3_err.push_back(loss.at(i));
-				neuron.set_err(loss.at(i));
-				deltas3.push_back(l3_err.back() * l3_out.at(i) * (1 - l3_out.at(i)));
-				i++;
-			}
-
-			// Calculating errors of layer 2
-			i = 0;
-			for (auto& neuron : l2) {
-				sum = 0.f;
-				j = 0;
-				for (float delta : deltas3) {
-					sum += delta * l3[j].get_weights()->at(i);
-					j++;
-				}
-				l2_err.push_back(sum);
-				neuron.set_err(sum);
-				deltas2.push_back(l2_err.back() * l2_out.at(i) * (1 - l2_out.at(i)));
-				i++;
-			}
-
-			// Calculating errors of layer 1
-			i = 0;
-			for (auto& neuron : l1) {
-				sum = 0.f;
-				j = 0;
-				for (float delta : deltas2) {
-					sum += delta * l2[j].get_weights()->at(i);
-					j++;
-				}
-				l1_err.push_back(sum);
-				neuron.set_err(sum);
-				deltas1.push_back(l1_err.back() * l1_out.at(i) * (1 - l1_out.at(i)));
-				i++;
-			}
-
-			// - Changing weights -
-			for (auto& neuron : l3) {
-				neuron.adjust_weights();
-			}
-			for (auto& neuron : l2) {
-				neuron.adjust_weights();
-			}
-			for (auto& neuron : l1) {
-				neuron.adjust_weights();
-			}
+		std::cout << "-- EPOCH " << epoch << " --" << std::endl;
+		// Clearing and re-instancing gradient matricies
+		grad3.clear(); grad2.clear(); grad1.clear();
+		grad3.resize(l3.size());
+		for (auto& el : grad3) {
+			el.resize(trainset->size());
+		}
+		grad2.resize(l2.size());
+		for (auto& el : grad2) {
+			el.resize(trainset->size());
+		}
+		grad1.resize(l1.size());
+		for (auto& el : grad1) {
+			el.resize(trainset->size());
 		}
 
-		//log << "E: " << sqrt(cost / trainset->size()) << "\n" << std::endl;
-		std::cout << "E: " << sqrt(cost / trainset->size()) << "\n" << std::endl;
+		// Shuffles the trainset each epoch
+		std::shuffle(trainset->begin(), trainset->end(), std::random_device());
+		
+		sample_cnt = 0;
+		for (sample t_sample : *trainset) {
+			deltas3.clear(); deltas2.clear(); deltas1.clear();	// Clearing layer-deltas vectors
+			l1_out.clear(); l2_out.clear(); l3_out.clear();		// Clearing layer-output vectors
+			
+			// - Forward propagation of the training sample -
+			std::vector<std::vector<uint8_t>> image;
+			int slice = 0;
+			for (neuron<T>& n : l1) {
+				image.push_back(t_sample.get_pvalues()->at(slice));
+				n.pulse(&(t_sample.get_pvalues()->at(slice)));
+				n.train(1.f);
+
+				l1_out.push_back(n.get_output());
+				slice++;
+			} //display_cimg(&image);
+			for (neuron<T>& n : l2) {
+				n.pulse(&l1_out);
+				n.train(1.f);
+
+				l2_out.push_back(n.get_output());
+			} std::cout << t_sample.get_key() << std::endl;
+			for (neuron<T>& n : l3) {
+				n.pulse(&l2_out);
+				n.train(0.6f);
+				
+				l3_out.push_back(n.get_output());
+				std::cout << l3_out.back() << std::endl;
+			} std::cout << "---------------------------------\n" << std::endl;
+
+			// - Back propagation -
+			
+			int i = 0, j = 0;
+			cost_of_sample = 0.f;
+			for (float actual_out : l3_out) {
+				ideal = desresult[t_sample.get_key()].at(i);
+				cost_of_sample += (actual_out - ideal) * (actual_out - ideal);
+				i++;
+			}
+
+			i = 0; j = 0;
+			for (float actual_out : l3_out) {	// Calculating deltas of l3
+				ideal = desresult[t_sample.get_key()].at(i);
+
+				deltas3.push_back((actual_out - ideal) * actual_out * (1 - actual_out));
+				i++;
+			}
+			
+			i = 0, j = 0;
+			for (float output : l2_out) {		// Calculating deltas of l2
+				sum = 0.f; i = 0;
+				for (neuron<T>& n : l3) {
+					sum += deltas3.at(i) * n.get_weights()->at(j);
+					i++;
+				}
+				deltas2.push_back(sum * output * (1 - output));
+				j++;
+			}
+			
+			i = 0, j = 0;
+			for (float output : l1_out) {		// Calculating deltas of l1
+				sum = 0.f; i = 0;
+				for (neuron<T>& n : l2) {
+					sum += deltas2.at(i) * n.get_weights()->at(j);
+					i++;
+				}
+				deltas1.push_back(sum * output * (1 - output));
+				j++;
+			}
+
+			// Calculating gradients for l3
+			neuron_cnt = 0;
+			for (neuron<T>& n : l3) {
+				for (int gradient_cnt = 0; gradient_cnt < n.get_ncon(); gradient_cnt++) {
+					grad3.at(neuron_cnt).at(sample_cnt)
+						.push_back(deltas3.at(neuron_cnt) * n.get_signals()->at(gradient_cnt));
+				}
+				neuron_cnt++;
+			}
+			// Calculating gradients for l2
+			neuron_cnt = 0;
+			for (neuron<T>& n : l2) {
+				for (int gradient_cnt = 0; gradient_cnt < n.get_ncon(); gradient_cnt++) {
+					grad2.at(neuron_cnt).at(sample_cnt)
+						.push_back(deltas2.at(neuron_cnt) * n.get_signals()->at(gradient_cnt));
+				}
+				neuron_cnt++;
+			}
+			// Calculating gradients for l1
+			neuron_cnt = 0;
+			for (neuron<T>& n : l1) {
+				for (int gradient_cnt = 0; gradient_cnt < n.get_ncon(); gradient_cnt++) {
+					grad1.at(neuron_cnt).at(sample_cnt)
+						.push_back(deltas1.at(neuron_cnt) * n.get_signals()->at(gradient_cnt));
+				}
+				neuron_cnt++;
+			}
+			sample_cnt++;
+		}
+		
+		neuron_cnt = 0;
+		for (neuron<T>& n : l3) {	// Averaging gradients of layer 3
+			avg_gradients.clear();
+
+			for (int gradient_cnt = 0; gradient_cnt < n.get_ncon(); gradient_cnt++) {
+				grad_sum = 0.f;
+				for (int sample_cnt = 0; sample_cnt < grad3.at(neuron_cnt).size(); sample_cnt++) {
+					grad_sum += grad3.at(neuron_cnt).at(sample_cnt).at(gradient_cnt);
+				}
+				avg_gradients.push_back(grad_sum / trainset->size());
+			}
+
+			n.adjust_weights(&avg_gradients, 0.1);
+			neuron_cnt++;
+		}
+
+		neuron_cnt = 0;
+		for (neuron<T>& n : l2) {	// Averaging gradients of layer 3
+			avg_gradients.clear();
+
+			for (int gradient_cnt = 0; gradient_cnt < n.get_ncon(); gradient_cnt++) {
+				grad_sum = 0.f;
+				for (int sample_cnt = 0; sample_cnt < grad2.at(neuron_cnt).size(); sample_cnt++) {
+					grad_sum += grad2.at(neuron_cnt).at(sample_cnt).at(gradient_cnt);
+				}
+				avg_gradients.push_back(grad_sum / trainset->size());
+			}
+
+			n.adjust_weights(&avg_gradients, 0.1);
+			neuron_cnt++;
+		}
+
+		neuron_cnt = 0;
+		for (neuron<T>& n : l1) {	// Averaging gradients of layer 3
+			avg_gradients.clear();
+
+			for (int gradient_cnt = 0; gradient_cnt < n.get_ncon(); gradient_cnt++) {
+				grad_sum = 0.f;
+				for (int sample_cnt = 0; sample_cnt < grad1.at(neuron_cnt).size(); sample_cnt++) {
+					grad_sum += grad1.at(neuron_cnt).at(sample_cnt).at(gradient_cnt);
+				}
+				avg_gradients.push_back(grad_sum / trainset->size());
+			}
+
+			n.adjust_weights(&avg_gradients, 0.1);
+			neuron_cnt++;
+		}
+
+		errs.push_back(cost_of_sample / trainset->size());
 	}
 
-	//log.close();
+	mpp::figure_size(800, 600);
+	mpp::xlim(0, n_epochs);
+	mpp::title("Error");
+	mpp::plot(errs);
+	mpp::show();
 }
-
-/*
-// Calculating errors of layer3
-			int j; i = 0;
-			for (auto& neuron : l3) {
-				l3_err.push_back(loss.at(i));
-				neuron.set_err(loss.at(i));
-				deltas3.push_back(l3_err.back() * l3_out.at(i) * (1 - l3_out.at(i)));
-				i++;
-			}
-
-			// Calculating errors of layer 2
-			i = 0;
-			for (auto& neuron : l2) {
-				sum = 0.f;
-				j = 0;
-				for (float delta : deltas3) {
-					sum += delta * l3[j].get_weights()->at(i);
-					j++;
-				}
-				l2_err.push_back(sum);
-				neuron.set_err(sum);
-				deltas2.push_back(l2_err.back() * l2_out.at(i) * (1 - l2_out.at(i)));
-				i++;
-			}
-
-			// Calculating errors of layer 1
-			i = 0;
-			for (auto& neuron : l1) {
-				sum = 0.f;
-				j = 0;
-				for (float delta : deltas2) {
-					sum += delta * l2[j].get_weights()->at(i);
-					j++;
-				}
-				l1_err.push_back(sum);
-				neuron.set_err(sum);
-				deltas1.push_back(l1_err.back() * l1_out.at(i) * (1 - l1_out.at(i)));
-				i++;
-			}
-
-			// - Changing weights -
-			for (auto& neuron : l3) {
-				neuron.adjust_weights();
-			}
-			for (auto& neuron : l2) {
-				neuron.adjust_weights();
-			}
-			for (auto& neuron : l1) {
-				neuron.adjust_weights();
-			}*/
-
-
-
-/*
-
-*/

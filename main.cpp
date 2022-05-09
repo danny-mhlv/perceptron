@@ -1,13 +1,13 @@
 #include <vector>
-#include <discpp.h>
 #include "CImg.h"
 #include "readnetpbm.h"
 #include "perceptron.h"
+#include "matplotlibcpp.h"
 
 void display_cimg(std::vector<uint8_t>* img, int w, int h, int pixelsz);
 
 int main(int argc, char* argv[]) {
-	// Init random seed
+	// Set random seed
 	srand((unsigned)time(0));
 
 	// Init trainset
@@ -26,7 +26,7 @@ int main(int argc, char* argv[]) {
 	//display_cimg(trainset.back().get_pvalues(), 54, 54, 1);
 
 	// Init network
-	const int layer1 = 6, layer2 = 4, layer3 = 4;
+	const int layer1 = 54, layer2 = 8, layer3 = 4;
 	perceptron3<uint8_t> net(layer1, layer2, layer3);
 	net.init_neurons(trainset.back().get_size(), layer1, layer2);
 	net.init_trainset(&trainset);
@@ -69,27 +69,17 @@ void display_cimg(std::vector<uint8_t>* img, int w, int h, int pixelsz) {
 	cimg.display();
 }
 
-/*
-void display_cimg(std::vector<uint8_t>* img, int w, int h, int pixelsz) {
+void display_cimg(std::vector<std::vector<uint8_t>>* img) {
 	using namespace cimg_library;
-	CImg<uint8_t> cimg(w, h, 1, 1, 0);
 
-	int posx, posy;
-	uint8_t color;
+	int w, h = 0;
+	std::vector<uint8_t> imgline;
+	for (auto& row : *img) {
+		imgline.insert(imgline.end(), row.begin(), row.end());
+		h++;
+	} w = img->back().size();
 
-	int i = 0, j = 0;
-	for (uint8_t pixel : *img) {
-		if (i != 0 && i % w == 0) {
-			j++;
-		}
-
-		posx = i * pixelsz;
-		posy = j * pixelsz;
-		color = pixel * 255;
-		//cimg.draw_rectangle(posx, posy, posx + pixelsz, posy + pixelsz, color);
-
-		i++;
-	}
-
+	const uint8_t* const data = &(imgline.at(0));
+	CImg<uint8_t> cimg(data, w, h);
 	cimg.display();
-}*/
+}

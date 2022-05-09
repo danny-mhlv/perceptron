@@ -116,6 +116,105 @@ void read_netpbm_bw(const char* filename, std::vector<uint8_t>* img) {
 	file.close();
 }
 
+void read_netpbm_bw(const char* filename, std::vector<std::vector<uint8_t>>* img) {
+	char btype[3] = { 0 };					// File type
+
+	char bw[5] = { 0 }; char bh[5] = { 0 }; // Width and height of image
+	int w, h;
+
+	char maxval[4] = { 0 };					// Max color value
+
+	char sym;								// For ASCII-based files
+	uint8_t val;							// For binary files
+
+	std::ifstream file(filename, std::ios::binary);
+	// Reading header
+	file.getline(btype, 3);
+	file.getline(bw, 5, ' ');
+	file.getline(bh, 5);
+	std::string type(btype);
+	w = atoi(bw);
+	h = atoi(bh);
+
+	if (img->empty()) {
+		img->resize(h);
+	}
+
+	// P1-6 is the magic number and file type indicator:
+	// ------------------------------- | 1 and 4 -> .pbm (b/w)
+	// 1-3 | is plain text (ASCII)	   | 2 and 5 -> .pgm (0-255 gray scale)
+	// 4-6 | is raw (binary)		   | 3 and 6 -> .ppm (3 channels 0-255 each)
+
+	if (type == "P1") {
+		for (int i = 0; i < h; i++) {
+			for (int j = 0; j < w; j++) {
+				file.read(&sym, 1);
+				//img->push_back(atoi(&sym));
+			}
+		}
+	}
+	else if (type == "P2") {
+		file.getline(maxval, 4);
+
+		for (int i = 0; i < h; i++) {
+			for (int j = 0; j < w; j++) {
+				file.read(&sym, 1);
+			}
+		}
+	}
+	else if (type == "P3") {
+		file.getline(maxval, 4);
+
+		for (int i = 0; i < h; i++) {
+			for (int j = 0; j < w; j++) {
+
+			}
+		}
+		file.read(&sym, 1);
+	}
+	else if (type == "P4") {
+		for (int i = 0; i < h; i++) {
+			for (int j = 0; j < w; j++) {
+
+			}
+		}
+		file.read(reinterpret_cast<char*>(&val), 1);
+	}
+	else if (type == "P5") {
+		file.getline(maxval, 4);
+
+		for (int i = 0; i < h; i++) {
+			for (int j = 0; j < w; j++) {
+
+			}
+		}
+		file.read(reinterpret_cast<char*>(&val), 1);
+	}
+	else if (type == "P6") {
+		file.getline(maxval, 4);
+
+		uint8_t r, g, b;
+		for (int i = 0; i < h; i++) {
+			for (int j = 0; j < w; j++) {
+				file.read(reinterpret_cast<char*>(&r), 1);
+				file.read(reinterpret_cast<char*>(&g), 1);
+				file.read(reinterpret_cast<char*>(&b), 1);
+
+				val = grayscale(r, g, b, 255);	//Grayscaling image
+				(val < 128) ? val = 0 : val = 1; // Turning it black/white
+
+				img->at(i).push_back(val);
+			}
+		}
+	}
+	else {
+		std::cout << "Not a Netpbm file or header corrupted!" << std::endl;
+		return;
+	}
+
+	file.close();
+}
+
 void apply_noise(std::vector<uint8_t>* img, float percent) {
 	srand((unsigned)time(0));
 
