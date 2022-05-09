@@ -285,13 +285,13 @@ perceptron3<T>::perceptron3(int n1, int n2, int n3, int trainset_sz)
 template<class T>
 void perceptron3<T>::init_neurons(int sample_sz, int l1_sz, int l2_sz)
 {
-	for (auto& el : l1) {
+	for (neuron<T>& el : l1) {
 		el.init_connections(sample_sz);
 	}
-	for (auto& el : l2) {
+	for (neuron<T>& el : l2) {
 		el.init_connections(l1_sz);
 	}
-	for (auto& el : l3) {
+	for (neuron<T>& el : l3) {
 		el.init_connections(l2_sz);
 	}
 }
@@ -323,8 +323,7 @@ void perceptron3<T>::teach(std::vector<sample>* trainset, int n_epochs) {
 	
 	float ideal = 0.f;
 	float sum = 0.f;
-	float cost_of_sample = 0.f;
-	std::vector<float> costs;
+	float err = 0.f;
 	float grad_sum = 0.f;
 	int neuron_cnt = 0;
 	int sample_cnt = 0;
@@ -342,7 +341,7 @@ void perceptron3<T>::teach(std::vector<sample>* trainset, int n_epochs) {
 	std::vector<float> avg_gradients;
 
 	for (int epoch = 1; epoch <= n_epochs; epoch++) {
-		std::cout << "-- EPOCH " << epoch << " --" << std::endl;
+		//std::cout << "-- EPOCH " << epoch << " --" << std::endl;
 		// Clearing and re-instancing gradient matricies
 		grad3.clear(); grad2.clear(); grad1.clear();
 		grad3.resize(l3.size());
@@ -362,30 +361,31 @@ void perceptron3<T>::teach(std::vector<sample>* trainset, int n_epochs) {
 		std::shuffle(trainset->begin(), trainset->end(), std::random_device());
 		
 		sample_cnt = 0;
+		err = 0.f;
 		for (sample t_sample : *trainset) {
+			std::cout << t_sample.get_key() << std::endl;
+
 			deltas3.clear(); deltas2.clear(); deltas1.clear();	// Clearing layer-deltas vectors
 			l1_out.clear(); l2_out.clear(); l3_out.clear();		// Clearing layer-output vectors
 			
 			// - Forward propagation of the training sample -
-			std::vector<std::vector<uint8_t>> image;
 			int slice = 0;
 			for (neuron<T>& n : l1) {
-				image.push_back(t_sample.get_pvalues()->at(slice));
 				n.pulse(&(t_sample.get_pvalues()->at(slice)));
-				n.train(1.f);
+				n.train();
 
 				l1_out.push_back(n.get_output());
 				slice++;
-			} //display_cimg(&image);
+			}
 			for (neuron<T>& n : l2) {
 				n.pulse(&l1_out);
-				n.train(1.f);
+				n.train();
 
 				l2_out.push_back(n.get_output());
-			} std::cout << t_sample.get_key() << std::endl;
+			}
 			for (neuron<T>& n : l3) {
 				n.pulse(&l2_out);
-				n.train(0.6f);
+				n.train(0.3f);
 				
 				l3_out.push_back(n.get_output());
 				std::cout << l3_out.back() << std::endl;
@@ -394,10 +394,9 @@ void perceptron3<T>::teach(std::vector<sample>* trainset, int n_epochs) {
 			// - Back propagation -
 			
 			int i = 0, j = 0;
-			cost_of_sample = 0.f;
 			for (float actual_out : l3_out) {
 				ideal = desresult[t_sample.get_key()].at(i);
-				cost_of_sample += (actual_out - ideal) * (actual_out - ideal);
+				err += 0.5 * (actual_out - ideal) * (actual_out - ideal);
 				i++;
 			}
 
@@ -405,7 +404,7 @@ void perceptron3<T>::teach(std::vector<sample>* trainset, int n_epochs) {
 			for (float actual_out : l3_out) {	// Calculating deltas of l3
 				ideal = desresult[t_sample.get_key()].at(i);
 
-				deltas3.push_back((actual_out - ideal));
+				deltas3.push_back((actual_out - ideal) * actual_out * (1 - actual_out));
 				i++;
 			}
 			
@@ -509,7 +508,7 @@ void perceptron3<T>::teach(std::vector<sample>* trainset, int n_epochs) {
 			neuron_cnt++;
 		}
 
-		errs.push_back(cost_of_sample / trainset->size());
+		errs.push_back(sqrt(err / trainset->size()));
 	}
 
 	mpp::figure_size(800, 600);
