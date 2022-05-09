@@ -405,7 +405,7 @@ void perceptron3<T>::teach(std::vector<sample>* trainset, int n_epochs) {
 			for (float actual_out : l3_out) {	// Calculating deltas of l3
 				ideal = desresult[t_sample.get_key()].at(i);
 
-				deltas3.push_back((actual_out - ideal) * actual_out * (1 - actual_out));
+				deltas3.push_back((actual_out - ideal));
 				i++;
 			}
 			
